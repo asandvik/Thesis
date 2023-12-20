@@ -29686,15 +29686,6 @@
                     "continueInterpolation": true,
                     "frame": 229.193681,
                     "state": "Endpoint"
-                },
-                {
-                    "x": 238.89183891049498,
-                    "y": 214.67020017036702,
-                    "w": 221.31927903463958,
-                    "h": 98.78628763777903,
-                    "continueInterpolation": true,
-                    "frame": 259.065352,
-                    "state": "Endpoint"
                 }
             ],
             "type": "Traffic camera views",
@@ -29779,18 +29770,27 @@
         {
             "keyframes": [
                 {
-                    "x": 201.84698104632787,
-                    "y": 150.07916594566535,
-                    "w": 55.5672867962507,
-                    "h": 59.36675939770373,
+                    "x": 238.89183891049498,
+                    "y": 214.67020017036702,
+                    "w": 221.31927903463958,
+                    "h": 98.78628763777903,
                     "continueInterpolation": true,
-                    "frame": 276.185769,
+                    "frame": 259.065352,
+                    "state": "Endpoint"
+                },
+                {
+                    "x": 90.71240745382644,
+                    "y": 152.4538363215735,
+                    "w": 221.31927903463955,
+                    "h": 98.78628763777903,
+                    "continueInterpolation": true,
+                    "frame": 268.5,
                     "state": "Endpoint"
                 }
             ],
             "type": "Traffic camera views",
-            "color": "#f48c7a",
-            "id": "_7aymo6e7k"
+            "color": "#ad2653",
+            "id": "_i68c973ia"
         },
         {
             "keyframes": [
@@ -29810,15 +29810,6 @@
                     "h": 162.42745371211743,
                     "continueInterpolation": true,
                     "frame": 283.589478,
-                    "state": "Endpoint"
-                },
-                {
-                    "x": 160.5277165055261,
-                    "y": 119.20845105885941,
-                    "w": 170.50133299020519,
-                    "h": 162.42745371211743,
-                    "continueInterpolation": true,
-                    "frame": 329.793599,
                     "state": "Endpoint"
                 }
             ],
