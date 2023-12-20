@@ -26055,15 +26055,6 @@
                     "continueInterpolation": true,
                     "frame": 34.847208,
                     "state": "Endpoint"
-                },
-                {
-                    "x": 217.99473960250327,
-                    "y": 132.0316710887634,
-                    "w": 94.03694688596272,
-                    "h": 105.91029876550348,
-                    "continueInterpolation": true,
-                    "frame": 154.126408,
-                    "state": "Endpoint"
                 }
             ],
             "type": "Traffic camera views",
