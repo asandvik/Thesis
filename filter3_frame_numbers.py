@@ -1,11 +1,11 @@
 """
-This script removes boxes where the "outside" and
-"occluded" attributes are the same from the previous
-box. It is applied after filter1
+This script calculates frame numbers within every
+track so that they correspond to their frame number
+in the videos. It is applied after filter2.
 """
 import xml.etree.ElementTree as ET
 
-tree = ET.parse('annotations_keyframes.xml')
+tree = ET.parse('annotations_state_changes.xml')
 root = tree.getroot()
 
 for track in root.iter('track'):
@@ -21,4 +21,4 @@ for track in root.iter('track'):
             prev_occ = track[i].attrib.get('occluded')
             i += 1
         
-tree.write('annotations_state_changes.xml')
+tree.write('annotations_filtered.xml')
