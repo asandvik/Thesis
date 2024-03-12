@@ -10,15 +10,19 @@ root = tree.getroot()
 
 for track in root.iter('track'):
     i = 0
-    prev_out = None
-    prev_occ = None
-    while i < len(track):
-        if (track[i].attrib.get('outside') == prev_out and
-            track[i].attrib.get('occluded') == prev_occ):
-            track.remove(track[i])
+
+    task_id = track.attrib.get('task_id')
+
+    offset = 0
+    for task in root[1][0][5].iter('task'):
+        if task_id == task[0].text: # id
+            break
         else:
-            prev_out = track[i].attrib.get('outside')
-            prev_occ = track[i].attrib.get('occluded')
-            i += 1
+            offset += int(task[2].text) # size
+
+    for box in track.iter('box'):
+        framenum = int(box.attrib.get('frame')) - offset
+        framenum -= offset
+        box.attrib.update({'frame':str(framenum)})
         
 tree.write('annotations_filtered.xml')
