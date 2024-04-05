@@ -17,4 +17,4 @@ for track in root.iter('track'):
         else:
             i += 1
 
-tree.write('annotations_keyframes.xml')
+tree.write('annotations1_keyframes.xml')

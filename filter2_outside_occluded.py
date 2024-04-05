@@ -21,4 +21,4 @@ for track in root.iter('track'):
             prev_occ = track[i].attrib.get('occluded')
             i += 1
         
-tree.write('annotations_state_changes.xml')
+tree.write('annotations2_state_changes.xml')

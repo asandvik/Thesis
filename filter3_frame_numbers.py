@@ -25,4 +25,4 @@ for track in root.iter('track'):
         framenum -= offset
         box.attrib.update({'frame':str(framenum)})
         
-tree.write('annotations_filtered.xml')
+tree.write('annotations3_filtered.xml')
