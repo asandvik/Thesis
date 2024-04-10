@@ -20,17 +20,25 @@ for task in in_root[1][0][5].iter('task'):
 
     joburl = task.find('segments').find('segment').find('url').text
 
-    video.set('name', task.find('name').text)
     video.set('taskid', task.find('id').text)
     video.set('jobid', joburl[len(joburl)-6:])
-    video.set('nframes', task.find('size').text)
-    video.set('width', task.find('original_size').find('width').text)
-    video.set('height', task.find('original_size').find('height').text)
+    
+    name = ET.SubElement(video, 'name')
+    name.text = task.find('name').text
+    length = ET.SubElement(video, 'length')
+    length.text = task.find('size').text
+    width = ET.SubElement(video, 'width')
+    width.text = task.find('original_size').find('width').text
+    height = ET.SubElement(video, 'height')
+    height.text = task.find('original_size').find('height').text
+    status = ET.SubElement(video, 'status')
+    status.text = 'rejected'
 
     tracks = ET.SubElement(video, 'tracks')
     timeline = ET.SubElement(video, 'timeline')
 
     while (i < num_tracks and in_tracks[i].attrib.get('task_id') == video.attrib.get('taskid')):
+        status.text = 'accepted'
         track = copy.deepcopy(in_tracks[i])
         track.attrib.__delitem__('source')
         track.attrib.__delitem__('subset')
@@ -51,4 +59,4 @@ for task in in_root[1][0][5].iter('task'):
 
 tree = ET.ElementTree(videos)
 ET.indent(tree)
-tree.write('annotations4_timelines.xml')
+tree.write('annotations4_tracks.xml')
