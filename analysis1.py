@@ -19,6 +19,9 @@ ongoing_occluded_after = []
 before_ongoing_occluded = []
 after = []
 
+ongoing = []
+occluded = []
+
 for video in videos.iter('video'):
 
     # Accepted vs Rejected
@@ -51,6 +54,8 @@ for video in videos.iter('video'):
         ongoing_occluded_after.append(0)
         after.append(0)
         before_ongoing_occluded.append(0)
+        ongoing.append(0)
+        occluded.append(0)
         totalframes = 0
         for interval in video.find('timeline').iter('interval'):
             nframes = int(interval.find('end').text) - int(interval.find('start').text) + 1 # add 1 -> same start and end is one frame
@@ -67,6 +72,12 @@ for video in videos.iter('video'):
                 after[-1] += nframes
             else:
                 before_ongoing_occluded[-1] += nframes
+            
+            if category == 'ongoing':
+                ongoing[-1] += nframes
+            
+            if category == 'occluded':
+                occluded[-1] += nframes
     
 
 fig1, ax1 = plt.subplots()
@@ -109,12 +120,36 @@ ax5.bar_label(bars)
 
 fig6, ax6 = plt.subplots()
 ax6.scatter(before, ongoing_occluded_after, marker='.')
-ax6.set(title='Crash Elements', xlabel='Frames before impact', ylabel='Frames after impact')
+ax6.set(title='Frames before and after moment of impact', xlabel='Frames before impact', ylabel='Frames after impact')
 ax6.set_aspect('equal')
 
 fig7, ax7 = plt.subplots()
 ax7.scatter(before_ongoing_occluded, after, marker='.')
-ax7.set(title='Crash Elements', xlabel='Frames before crash is over', ylabel='Frames after crash is over')
+ax7.set(title='Frames before and after crash ends', xlabel='Frames before crash is over', ylabel='Frames after crash is over')
 ax7.set_aspect('equal')
+
+fig8, axes = plt.subplots(2,2)
+binwidth = 30
+_, _, bars = axes[0, 0].hist(before, bins=range(min(before), max(before) + binwidth, binwidth))
+axes[0, 0].set(title='Before', xlabel='duration (frames)', ylabel='count')
+axes[0, 0].bar_label(bars)
+_, _, bars = axes[0, 1].hist(ongoing, bins=range(min(ongoing), max(ongoing) + binwidth, binwidth))
+axes[0, 1].set(title='Ongoing', xlabel='duration (frames)', ylabel='count')
+axes[0, 1].bar_label(bars)
+_, _, bars = axes[1, 0].hist(occluded, bins=range(min(occluded), max(occluded) + binwidth, binwidth))
+axes[1, 0].set(title='Occluded', xlabel='duration (frames)', ylabel='count')
+axes[1, 0].bar_label(bars)
+_, _, bars = axes[1, 1].hist(after, bins=range(min(after), max(after) + binwidth, binwidth))
+axes[1, 1].set(title='After', xlabel='duration (frames)', ylabel='count')
+axes[1, 1].bar_label(bars)
+
+
+# fig1.savefig('fig_CAPD_accepted_rejected.png')
+# fig2.savefig('fig_frame_categories.png')
+# fig3.savefig('fig_video_durations.png')
+# fig4.savefig('fig_video_resolutions.png')
+# fig5.savefig('fig_crash_elements.png')
+# fig6.savefig('fig_moment_of_impact.png')
+# fig7.savefig('fig_after_crash.png')
 
 plt.show()
