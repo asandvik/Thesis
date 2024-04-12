@@ -9,7 +9,7 @@ tree = ET.parse('annotations4_tracks.xml')
 root = tree.getroot()
 
 # in order of priority from low to high
-categories = ['before-crash', 'after-crash', 'occluded-crash', 'ongoing-crash']
+categories = ['before', 'after', 'occluded', 'ongoing']
 
 for video in root.iter('video'):
 
