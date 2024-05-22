@@ -2,12 +2,14 @@ import cv2
 import numpy as np
 import pandas as pd
 import torch
+import torchvision
+import itertools
 from torch.utils.data import Dataset, DataLoader
 from torchvision import transforms as t
 
 class CPTADDataset(Dataset):
 
-    def __init__(self, label_file, data_path, nframes=16, transform=None):
+    def __init__(self, label_file, data_path, nframes=8, frame_transform=None, video_transform=None):
         """
         Arguments:
             csv_file (string): Path to the csv file with annotations.
@@ -19,30 +21,38 @@ class CPTADDataset(Dataset):
         self.data_path = data_path
         self.nframes = nframes
         self.resolution = (112, 112) #https://arxiv.org/pdf/1711.11248
-        self.transform = transform ###
+        self.frame_transform = frame_transform
+        self.video_transform = video_transform
 
     def __len__(self):
         return len(self.data)
 
     def __getitem__(self, idx):
 
-        video_name = frame_list.iloc[idx, 0]
-        frame_num = frame_list.iloc[idx, 1]
-        class_label = frame_list.iloc[idx, 2]
+        video_name = self.data.iloc[idx, 0]
+        frame_num = self.data.iloc[idx, 1]
+        class_label = self.data.iloc[idx, 2]
 
         filename = '/notebooks/data/Datasets/CPTAD/Videos/' + video_name
 
-        segment,_,_ = torchvision.io.read_video(filename,
-                                               start_pts=(frame_num - self.dim[0])/30,
-                                               end_pts=frame_num/30,
-                                               pts_unit='sec',
-                                               output_format="THWC")
+        video = torchvision.io.VideoReader(filename, "video")
+        metadata = video.get_metadata()
+        fps = metadata["video"]['fps'][0]
+        frames = []
 
-        segment = segment.permute([3, 0, 1, 2]), # THWC -> CTHW
+        start = (frame_num - self.nframes)/fps
+        for frame in itertools.islice(video.seek(start), self.nframes):
+            frames.append(frame['data'])
+            #current_pts = frame['pts']
 
-        if self.transform:
-            segment = self.transform(segment)
+        segment = torch.stack(frames, 0)
+        if self.video_transform:
+               segment = self.video_transform(segment)
 
-        class_label = torch.tensor([int(class_label)])
+        # segment = segment.permute([3, 0, 1, 2]), # THWC -> CTHW
+
+        label = torch.tensor(int(class_label))
+
+        # print("{}. {}".format(idx, label.size()))
         
-        return seg_tensor, class_label
+        return segment, label
