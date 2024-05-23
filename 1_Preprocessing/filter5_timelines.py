@@ -25,7 +25,7 @@ for video in root.iter('video'):
         symbol = 0
         framelist = track.findall('frame')
         for j in range(0, len(framelist)):
-
+            
             frame = framelist[j]
 
             startframe = int(frame.attrib.get('frame'))
