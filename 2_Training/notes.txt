@@ -1,0 +1,3 @@
+exp3: default, 40 epochs
+ > increase numworkers or batchsize when only training last layer
+ > experiment with different learning rates
