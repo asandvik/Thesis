@@ -4,13 +4,14 @@ import torch
 import pandas as pd
 import numpy as np
 import seaborn as sn
+import xml.etree.ElementTree as ET
 from torch import nn
 from torch.utils.data import DataLoader
 from torchvision import transforms, utils
 from torchvision import transforms as t
 from torchvision.models.video.resnet import r2plus1d_18, R2Plus1D_18_Weights
 # from torchvision.models.video.swin_transformer import swin3d_b Swin3D_B_Weights
-from CPTADDataset import CPTADDataset
+from CPTADDataset2 import CPTADDataset2
 from datetime import datetime
 from torch.utils.tensorboard import SummaryWriter
 from transforms import ConvertBCHWtoCBHW
@@ -20,18 +21,18 @@ import matplotlib.pyplot as plt
 parser = argparse.ArgumentParser()
 parser.add_argument('--learn', type=float, default=0.001, help='learning rate')
 parser.add_argument('--momentum', type=float, default=0.9, help='momentum')
-parser.add_argument('--batch', type=int, default=16, help='batch size')
+parser.add_argument('--batch', type=int, default=8, help='batch size')
 parser.add_argument('--workers', type=int, default=4, help='number of dataloader workers')
 parser.add_argument('--check', type=int, default=10, help='how many batches before sub-epoch reporting')
 parser.add_argument('--epochs', type=int, default=10, help='maximum number of epochs')
 parser.add_argument('--chkpnt', type=int, default=5, help='number of epochs before checkpointing')
 parser.add_argument('--nframes', type=int, default=16, help='number of frames in sample')
-parser.add_argument('--anno', type=str, default='intervals16', help='annotation files directory')
+parser.add_argument('--anno', type=str, default='sampleregions', help='annotation files directory')
 parser.add_argument('--model', type=str, default='cnn', const='cnn', nargs='?', 
                     choices=['cnn','swin'], help='R(2+1)D or Swin Transformer')
-parser.add_argument('--loader', type=str, default='intervals', const='intervals', nargs='?',
-                    choices=['intervals','windows'], help='data loader sampling technique')
-parser.add_argument('--loss', type=str, default='CE', const='CE', nargs='?',
+parser.add_argument('--loader', type=str, default='regions', const='regions', nargs='?',
+                    choices=['intervals','windows','regions'], help='data loader sampling technique')
+parser.add_argument('--loss', type=str, default='BCE', const='BCE', nargs='?',
                     choices=['CE','BCE'], help='loss function')
 parser.add_argument('tag', type=str, help='unique tag for this experiment')
 
@@ -62,9 +63,9 @@ elif args.model == 'swin':
 else:
     error('invalid model. argparse should have caught.')
 
-if args.loss == 'CE':
+if args.loss == 'BCE':
     criterion = torch.nn.BCEWithLogitsLoss()
-elif args.loss == 'BCE':
+elif args.loss == 'CE':
     criterion = torch.nn.CrossEntropyLoss()
 else:
     error('invalid loss function. argparse should have caught.')
@@ -75,14 +76,10 @@ optimizer = torch.optim.SGD(model.parameters(), lr=args.learn, momentum=args.mom
 mean = [0.43216, 0.394666, 0.37645]
 std = [0.22803, 0.22145, 0.216989]
 
-# TODO: transforms for swin
-
 # https://github.com/pytorch/vision/blob/main/references/video_classification/presets.py
 video_transform_train = transforms.Compose([
                                 t.ConvertImageDtype(torch.float32),
-                                # horizontal flip? Not sure if belongs in frame or video transform
-                                t.Resize((128, 171)),
-                                t.RandomCrop((112, 112)),
+                                t.RandomHorizontalFlip(),
                                 t.Normalize(mean=mean,std=std),
                                 ConvertBCHWtoCBHW()
 ])
@@ -90,36 +87,40 @@ video_transform_train = transforms.Compose([
 
 video_transform_eval = transforms.Compose([
                                 t.ConvertImageDtype(torch.float32),
-                                t.Resize((128, 171)),
-                                t.CenterCrop((112, 112)),
+                                t.RandomHorizontalFlip(),
                                 t.Normalize(mean=mean,std=std),
                                 ConvertBCHWtoCBHW()
 ])
                                 
-training_data = CPTADDataset(ANNO_DIR + "anno_train.csv", 
-                             "../data/Datasets/CPTAD/Videos/", 
+training_data = CPTADDataset2(ANNO_DIR + "anno_train.csv", 
+                             "../data/Datasets/CPTAD/Videos/",
+                             '/notebooks/Thesis/1_Preprocessing/annotations_reformatted.xml',
                              nframes=args.nframes,
                              video_transform=video_transform_train,
                              sample_tech=args.loader)
 
-valid_data = CPTADDataset(ANNO_DIR + "anno_valid.csv",
+valid_data = CPTADDataset2(ANNO_DIR + "anno_valid.csv",
                             "../../data/Datasets/CPTAD/Videos",
+                            '/notebooks/Thesis/1_Preprocessing/annotations_reformatted.xml',
                             nframes=args.nframes,
                             video_transform=video_transform_eval,
                             sample_tech=args.loader)
 
 # TODO: change sample_tech to window
-test_data = CPTADDataset(ANNO_DIR + "anno_test.csv", 
-                            "../data/Datasets/CPTAD/Videos/", 
-                            nframes=args.nframes,
-                            video_transform=video_transform_eval,
-                            sample_tech=args.loader)
+# test_data = CPTADDataset(ANNO_DIR + "anno_test.csv", 
+#                             "../data/Datasets/CPTAD/Videos/",
+#                             videos,
+#                             nframes=args.nframes,
+#                             video_transform=video_transform_eval,
+#                             sample_tech=args.loader)
 
-print("NUM SAMPLES train:{} validation:{} test:{}".format(len(training_data), len(valid_data), len(test_data)))
+print("NUM SAMPLES train:{} validation:{}".format(len(training_data), len(valid_data),))
 
 train_dataloader = DataLoader(training_data, batch_size=args.batch, num_workers=args.workers)
 valid_dataloader = DataLoader(valid_data, batch_size=args.batch, num_workers=args.workers)
-test_dataloader = DataLoader(test_data, batch_size=args.batch, num_workers=args.workers)
+# test_dataloader = DataLoader(test_data, batch_size=args.batch, num_workers=args.workers)
+
+print(f" - Number of samples : {len(train_dataloader.dataset)} | Number of batches: {len(train_dataloader)}")
 
 writer = SummaryWriter(RUNS_DIR)
 
@@ -134,8 +135,9 @@ for epoch in range(args.epochs):
     train_loss = 0
     train_true = []
     train_pred = []
+    total_samples = 0
     
-    for i, data in enumerate(train_dataloader):
+    for i, data in enumerate(train_dataloader, 0):
 
         inputs, labels = data
         inputs, labels = inputs.to(device), labels.to(device)
@@ -149,7 +151,7 @@ for epoch in range(args.epochs):
         train_pred.extend(predicted.data.cpu().numpy())
 
         # total_correct += (predicted == labels).sum().item()
-        # total_samples += labels.size(0)
+        total_samples += labels.size(0)
         
         loss = criterion(outputs, labels)
         loss.backward()
@@ -164,7 +166,9 @@ for epoch in range(args.epochs):
         #     writer.add_scalars(tag + '/BatchLoss', {'Epoch_'+str(epoch+1):batch_loss}, tb_x)
         #     writer.flush()
             
-    # End of epoch
+    # End of Epoch
+    
+    print("total samples:", total_samples)
     
     # Validating after training epoch
     model.eval()
@@ -175,7 +179,7 @@ for epoch in range(args.epochs):
     val_true = []
     val_pred = []
     with torch.no_grad():
-        for i, data in enumerate(valid_dataloader):
+        for i, data in enumerate(valid_dataloader, 0):
 
             inputs, labels = data
             inputs, labels = inputs.to(device), labels.to(device)
@@ -272,13 +276,13 @@ for epoch in range(args.epochs):
         best_accuracy_epoch = epoch+1
         torch.save(model.state_dict(), model_path)
 
-    # save best recall
-    if val_recall > val_recall_best:
-        val_recall_best = val_recall
-        model_path = '{}{}_bestRecall'.format(MODEL_DIR,tag)
-        print("Saving model. Epoch: {}".format(epoch+1))
-        best_recall_epoch = epoch+1
-        torch.save(model.state_dict(), model_path)
+    # # save best recall
+    # if val_recall > val_recall_best:
+    #     val_recall_best = val_recall
+    #     model_path = '{}{}_bestRecall'.format(MODEL_DIR,tag)
+    #     print("Saving model. Epoch: {}".format(epoch+1))
+    #     best_recall_epoch = epoch+1
+    #     torch.save(model.state_dict(), model_path)
 
 print("Best Accuracy Epoch: {}".format(best_accuracy_epoch))
 print("Best Recall Epoch: {}".format(best_recall_epoch))

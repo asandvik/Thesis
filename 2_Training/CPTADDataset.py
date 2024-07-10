@@ -65,9 +65,9 @@ class CPTADDataset(Dataset):
 
         # print("{}. {}".format(idx, label.size()))
         
-        return segment, label
+        return segment, label        
 
-    def __init__(self, label_file, data_path, nframes=8, frame_transform=None, video_transform=None, sample_tech='intervals'):
+    def __init__(self, label_file, data_path, nframes=8, frame_transform=None, video_transform=None, sample_tech='regions'):
         """
         Arguments:
             csv_file (string): Path to the csv file with annotations.
