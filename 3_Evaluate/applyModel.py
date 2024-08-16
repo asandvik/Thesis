@@ -13,7 +13,7 @@ VIDEO_DIR = '/notebooks/data/Datasets/CPTAD/Videos/'
 NFRAMES_MD = 5
 NFRAMES_01 = 16
 PATCH_SIZE = 112
-STRIDE = 56 # 112, 84, 56, 28
+STRIDE = 112 # 112, 84, 56, 28
 BIN_THRESH = 30 # grayscale to binary threshold. max 255
 MOVE_THRESH = 200 # min number of pixels that need to be lit up in the binary movement image. max 112x112
 
@@ -29,7 +29,7 @@ height = int(cap.get(cv2.CAP_PROP_FRAME_HEIGHT))
 length = int(cap.get(cv2.CAP_PROP_FRAME_COUNT))
 fps = cap.get(cv2.CAP_PROP_FPS)
 
-vidwriter = cv2.VideoWriter('/notebooks/Thesis/results/' + randvid, 
+vidwriter = cv2.VideoWriter('/notebooks/Thesis/results/spread_' + randvid, 
                       cv2.VideoWriter_fourcc(*'XVID'), 
                       fps,
                       (width, height))
@@ -150,7 +150,7 @@ while (True):
 
 results = np.array(results).reshape(-1, len(results[0]))
 results = pd.DataFrame(results)
-results.to_csv(f"/notebooks/Thesis/results/{randvid[:-4]}.csv", index=False, header=False)
+results.to_csv(f"/notebooks/Thesis/results/spread_{randvid[:-4]}.csv", index=False, header=False)
 
 cap.release()
 vidwriter.release()
