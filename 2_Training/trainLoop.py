@@ -87,7 +87,7 @@ video_transform_train = transforms.Compose([
 
 video_transform_eval = transforms.Compose([
                                 t.ConvertImageDtype(torch.float32),
-                                t.RandomHorizontalFlip(),
+                                # t.RandomHorizontalFlip(),
                                 t.Normalize(mean=mean,std=std),
                                 ConvertBCHWtoCBHW()
 ])
