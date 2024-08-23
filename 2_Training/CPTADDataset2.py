@@ -80,11 +80,6 @@ class CPTADDataset2(Dataset):
         for _ in range(self.nframes):
             frame = next(reader)
             frames.append(t.functional.crop(frame['data'], h0, w0, 112, 112))
-            
-        segment = torch.stack(frames, 0)
-        
-        if self.video_transform:
-               segment = self.video_transform(segment)
                 
         segment = torch.stack(frames, 0)
         if self.video_transform:

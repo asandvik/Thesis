@@ -50,6 +50,10 @@ for task in root[1][0][5].iter('task'):
     height.text = task.find('original_size').find('height').text
     numtracks = ET.SubElement(video, 'numtracks')
     numtracks.text = '0'
+    crashstart = ET.SubElement(video, 'crashstart')
+    crashstart.text = '0'
+    crashsettled = ET.SubElement(video, 'crashsettled')
+    crashsettled.text = '0'
     status = ET.SubElement(video, 'status')
     status.text = 'rejected'
 
@@ -73,7 +77,38 @@ for task in root[1][0][5].iter('task'):
         # ET.SubElement(tracks, track.tag, track.attrib)
         i += 1
 
+    # Determine start and end/settle frames of crash
+    if status.text == 'accepted':
+        tracklist = tracks.findall('track')
+        crashstart.text = tracklist[0][0].attrib.get('frame')
+        settlelist = []
+        for track in tracklist:
+            framelist = track.findall('frame')
+            nframes = len(framelist)
+            track.set('start', framelist[0].attrib.get('frame'))
+            currbbox = [framelist[nframes-1].attrib.get('xtl'),
+                        framelist[nframes-1].attrib.get('ytl'),
+                        framelist[nframes-1].attrib.get('xbr'),
+                        framelist[nframes-1].attrib.get('ybr')]
+            for j in range(nframes-2, -1, -1):
+                nextbbox = [framelist[j].attrib.get('xtl'),
+                            framelist[j].attrib.get('ytl'),
+                            framelist[j].attrib.get('xbr'),
+                            framelist[j].attrib.get('ybr')]
+                if nextbbox != currbbox:
+                    crashsettle = framelist[j+1].attrib.get('frame')
+                    break
+                elif j == 0:
+                    crashsettle = framelist[j].attrib.get('frame')
+            if nframes == 1:
+                crashsettle = framelist[0].attrib.get('frame')
+            track.set('settled', crashsettle)
+            track.set('end', framelist[-1].attrib.get('frame'))
+            settlelist.append(int(crashsettle))
+        crashsettled.text = str(max(settlelist))
+
 tree = ET.ElementTree(videos)
 ET.indent(tree)
 
-tree.write('annotations_reformat.xml')
+tree.write('annotations_reformatted.xml')
+print("done")
