@@ -33,11 +33,9 @@ for j in range(len(resultfiles)):
 
     results = pd.read_csv(f'/notebooks/Thesis/results/{MODEL}/{filename}')
 
-    numframes = results.iloc[-1, 0] - results.iloc[0, 0] + 1
-    framenum = [0]*numframes
-    numpatches = [0]*numframes
-    numpositive = [0]*numframes
-    percentpositive = [0]*numframes
+    framenum = []
+    numpatches = []
+    numpositive = []
     prevpatchnum = -1
     j = -1
 
@@ -47,25 +45,28 @@ for j in range(len(resultfiles)):
 
         if currpatchnum != prevpatchnum:
             j += 1
-            framenum[j] = currpatchnum
-
-        numpatches[j] += 1
-        numpositive[j] += currpatchres
+            framenum.append(currpatchnum)
+            numpatches.append(1)
+            numpositive.append(currpatchres)
+        else:
+            numpatches[j] += 1
+            numpositive[j] += currpatchres
 
         prevpatchnum = currpatchnum
 
-    for i in range(len(percentpositive)):
-        if numpatches[i] > 0:
-            percentpositive[i] = numpositive[i] / numpatches[i]
+    percentpositive = []
+    for i in range(len(numpositive)):
+        percentpositive.append(numpositive[i] / numpatches[i])
 
     fig1 = plt.figure()
     ax1 = fig1.add_subplot()
     ax1.vlines(x = impactframes, ymin = 0, ymax = max(numpositive), colors = 'red')
     ax1.plot(framenum, numpositive)
 
-    # fig2 = plt.figure()
-    # ax2 = fig2.add_subplot()
-    # ax2.vlines(x = impactframes, ymin = 0, ymax = max(percentpositive), colors = 'red')
-    # ax2.plot(framenum, percentpositive)
+    fig2 = plt.figure()
+    ax2 = fig2.add_subplot()
+    ax2.vlines(x = impactframes, ymin = 0, ymax = max(percentpositive), colors = 'red')
+    ax2.plot(framenum, percentpositive)
 
-    plt.savefig(f'/notebooks/Thesis/results/{MODEL}/{filename[0:-11]}.png')
+    fig1.savefig(f'/notebooks/Thesis/results/{MODEL}/{filename[0:-11]}_tot.png')
+    fig2.savefig(f'/notebooks/Thesis/results/{MODEL}/{filename[0:-11]}_per.png')
