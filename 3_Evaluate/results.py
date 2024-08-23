@@ -21,8 +21,7 @@ for j in range(len(resultfiles)):
     filename = resultfiles[j]
     videoid = filename[-10:-4]
 
-    print(filename)
-    print(videoid)
+    print(j,filename, videoid)
 
     videoinfo = root.find(f"./video[@taskid='{videoid}']")
     tracks = videoinfo.find('tracks')
@@ -33,30 +32,25 @@ for j in range(len(resultfiles)):
 
     results = pd.read_csv(f'/notebooks/Thesis/results/{MODEL}/{filename}')
 
-    framenum = []
-    numpatches = []
-    numpositive = []
-    prevpatchnum = -1
-    j = -1
+    firstframe = results.iloc[0, 0]
+    lastframe = results.iloc[-1, 0]
+    numframes = lastframe - firstframe + 1
+
+    framenum = range(firstframe, lastframe+1)
+    numpatches = [0]*numframes
+    numpositive = [0]*numframes
+    percentpositive = [0]*numframes
 
     for i in range(len(results)):
-        currpatchnum = results.iloc[i, 0]
+        currframe = results.iloc[i, 0]
         currpatchres = results.iloc[i, 3]
 
-        if currpatchnum != prevpatchnum:
-            j += 1
-            framenum.append(currpatchnum)
-            numpatches.append(1)
-            numpositive.append(currpatchres)
-        else:
-            numpatches[j] += 1
-            numpositive[j] += currpatchres
+        numpatches[currframe-firstframe] += 1
+        numpositive[currframe-firstframe] += currpatchres
 
-        prevpatchnum = currpatchnum
-
-    percentpositive = []
     for i in range(len(numpositive)):
-        percentpositive.append(numpositive[i] / numpatches[i])
+        if numpatches[i] > 0:
+            percentpositive[i] = numpositive[i] / numpatches[i]
 
     fig1 = plt.figure()
     ax1 = fig1.add_subplot()
@@ -70,3 +64,4 @@ for j in range(len(resultfiles)):
 
     fig1.savefig(f'/notebooks/Thesis/results/{MODEL}/{filename[0:-11]}_tot.png')
     fig2.savefig(f'/notebooks/Thesis/results/{MODEL}/{filename[0:-11]}_per.png')
+    # plt.show()
