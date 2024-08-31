@@ -9,6 +9,7 @@ from torch import nn
 from torch.utils.data import DataLoader
 from torchvision import transforms, utils
 from torchvision import transforms as t
+from torchvision.transforms import v2 as t2
 from torchvision.models.video.resnet import r2plus1d_18, R2Plus1D_18_Weights
 # from torchvision.models.video.swin_transformer import swin3d_b Swin3D_B_Weights
 from CPTADDataset3carcar import CPTADDataset3carcar
@@ -19,12 +20,12 @@ from sklearn.metrics import confusion_matrix, f1_score, precision_score, recall_
 import matplotlib.pyplot as plt
 
 parser = argparse.ArgumentParser()
-parser.add_argument('--learn', type=float, default=0.001, help='learning rate')
+parser.add_argument('--learn', type=float, default=0.0002, help='learning rate')
 parser.add_argument('--momentum', type=float, default=0.9, help='momentum')
 parser.add_argument('--batch', type=int, default=8, help='batch size')
-parser.add_argument('--workers', type=int, default=4, help='number of dataloader workers')
+parser.add_argument('--workers', type=int, default=8, help='number of dataloader workers')
 parser.add_argument('--check', type=int, default=10, help='how many batches before sub-epoch reporting')
-parser.add_argument('--epochs', type=int, default=200, help='maximum number of epochs')
+parser.add_argument('--epochs', type=int, default=100, help='maximum number of epochs')
 parser.add_argument('--chkpnt', type=int, default=1, help='number of epochs before checkpointing')
 parser.add_argument('--nframes', type=int, default=16, help='number of frames in sample')
 parser.add_argument('--anno', type=str, default='sampleregions', help='annotation files directory')
@@ -64,22 +65,34 @@ mean = [0.43216, 0.394666, 0.37645]
 std = [0.22803, 0.22145, 0.216989]
 
 # https://github.com/pytorch/vision/blob/main/references/video_classification/presets.py
-video_transform_train = transforms.Compose([
-                                t.RandomHorizontalFlip(),
+video_transform_train = t2.Compose([
+                                t2.RandomHorizontalFlip(),
+                                t2.RandomRotation(15),
+                                # t2.RandomChannelPermutation(),
+                                # t2.RandomInvert(),
+                                t2.GaussianBlur(kernel_size=(5,9), sigma=(0.1, 2.0)),
+                                # t2.GaussianNoise(mean=0.0, sigma=0.1), # not supported this version
+                                # t.RandomAdjustSharpness(),
+                                # t.RandomAutocontrast(),
+                                # t.RandomEqualize(),
+
 ])
-                               
+                    
                                 
 training_data = CPTADDataset3carcar("/notebooks/Thesis/annotations/carcar/anno_train.csv",
-                             "../data/Datasets/CPTAD/Videos/",
+                             "/notebooks/data/Datasets/CPTAD/Videos/",
+                             "/notebooks/data/Datasets/CPTAD/Videos_Normal/Train/",
                              "/notebooks/Thesis/1_Preprocessing/annotations_reformatted.xml",
-                             nframes=16,
+                             nframes=args.nframes,
                              video_transform=video_transform_train
                              )
 
 valid_data = CPTADDataset3carcar("/notebooks/Thesis/annotations/carcar/anno_valid.csv",
-                             "../data/Datasets/CPTAD/Videos/",
+                             "/notebooks/data/Datasets/CPTAD/Videos/",
+                             "/notebooks/data/Datasets/CPTAD/Videos_Normal/Validation/",
                              "/notebooks/Thesis/1_Preprocessing/annotations_reformatted.xml",
-                             nframes=16,
+                             nframes=args.nframes,
+                             nspi=32
                              )
 
 print("NUM SAMPLES train:{} validation:{}".format(len(training_data), len(valid_data),))
@@ -108,7 +121,7 @@ for epoch in range(args.epochs):
     for i, data in enumerate(train_dataloader, 0):
 
         inputs, labels = data
-        # print(labels)
+        print(labels)
         inputs, labels = inputs.float().to(device), labels.to(device)
 
         optimizer.zero_grad()
@@ -153,8 +166,10 @@ for epoch in range(args.epochs):
             loss = criterion(outputs, labels)
             val_loss += loss.item()*inputs.size(0)
 
-    print(val_true)
-    print(val_pred)
+    # print(val_true)
+    # print(val_pred)
+
+    print("updating tensorboard")
 
     train_ave_loss = train_loss/len(train_dataloader.dataset)
     val_ave_loss = val_loss/len(valid_dataloader.dataset)
@@ -172,8 +187,8 @@ for epoch in range(args.epochs):
     val_accuracy = accuracy_score(val_true, val_pred)
     
     # confusion matrix
-    # val_cf_matrix = confusion_matrix(val_true, val_pred)
-    # train_cf_matrix = confusion_matrix(train_true, train_pred)
+    val_cf_matrix = confusion_matrix(val_true, val_pred)
+    train_cf_matrix = confusion_matrix(train_true, train_pred)
     
     writer.add_scalars(tag + '/Training vs. Validation F1 Score',
                         {'Training':train_f1,'Validation':val_f1},
@@ -197,15 +212,15 @@ for epoch in range(args.epochs):
 
     # Double check labels are correct with recall/precision/accuracy calculation
     # print(val_cf_matrix) # for some reason it was [[360]]
-    # writer.add_scalars(tag + '/Training TFPN',
-    #                   {'TN':train_cf_matrix[0][0],'FP':train_cf_matrix[0][1],
-    #                    'FN':train_cf_matrix[1][0],'TP':train_cf_matrix[1][1]},
-    #                   epoch+1)
+    writer.add_scalars(tag + '/Training TFPN',
+                      {'TN':train_cf_matrix[0][0],'FP':train_cf_matrix[0][1],
+                       'FN':train_cf_matrix[1][0],'TP':train_cf_matrix[1][1]},
+                      epoch+1)
 
-    # writer.add_scalars(tag + '/Validation TFPN',
-    #               {'TN':val_cf_matrix[0][0],'FP':val_cf_matrix[0][1],
-    #                'FN':val_cf_matrix[1][0],'TP':val_cf_matrix[1][1]},
-    #               epoch+1)
+    writer.add_scalars(tag + '/Validation TFPN',
+                  {'TN':val_cf_matrix[0][0],'FP':val_cf_matrix[0][1],
+                   'FN':val_cf_matrix[1][0],'TP':val_cf_matrix[1][1]},
+                  epoch+1)
     writer.flush()
 
     # checkpoint
@@ -223,4 +238,4 @@ for epoch in range(args.epochs):
         torch.save(model.state_dict(), model_path)
 
 print("Best Accuracy Epoch: {}".format(best_accuracy_epoch))
-print("Best Recall Epoch: {}".format(best_recall_epoch))
+# print("Best Recall Epoch: {}".format(best_recall_epoch))

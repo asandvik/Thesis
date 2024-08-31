@@ -11,3 +11,25 @@ exp9: same as exp7 but with BCELoss(), 70 epochs
     validation accuracy stays around 50%. Not good. Not learning what a car crash looks like. Too low resolution (128x171->crop112x112)? Try object detector model?
 > added TFPN measurements
 exp10: same as exp8 (for accuracy)
+
+
+
+
+
+cc1: training nspi 8
+cc2: movement added? or maybe thats cc3
+cc3: sample crash early with gaussian
+cc4: validation nspi to 8. training to 2
+rot30: add randomRotation(30)
+rot30p2: val nspi to 128
+rot30p3: lr to 0.0001
+aug1: val nspi 32. t2.RandomHorizontalFlip(),
+                   t2.RandomRotation(15),
+                   t2.RandomChannelPermutation(),
+                   t2.RandomInvert(),
+                   t2.GaussianBlur(kernel_size=(5,9), sigma=(0.1, 2.0))
+aug2: num workers to 8 (was 4). rm channelPermutation and RandomInvert. lr to 0.0002
+aug3: nframes=32
+aug4: nframes=48. removed videos 437022 436703 436814 (nframes<48)
+aug5: nframes=32. readded above videos. added normal videos
+aug6: nframes=48. removed videos 437022 436703 436814 (nframes<48)
