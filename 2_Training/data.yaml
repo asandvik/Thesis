@@ -1,0 +1,7 @@
+path: /notebooks/Thesis/data_yolo
+train: images/train
+val: images/val
+
+names:
+  0: Car/Car
+

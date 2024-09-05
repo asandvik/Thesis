@@ -246,7 +246,7 @@ for j in range(len(vidlist) + len(normvidlist)):
     if len(results) > 0:
         results = np.array(results).reshape(-1, len(results[0]))
     results = pd.DataFrame(results, columns=['frame', 'xtl', 'ytl', 'target', 'prediction'])
-    results.to_csv(resultFile, index=False, header=False)
+    results.to_csv(resultFile, index=False)
 
     cap.release()
     vidwriter.release()
