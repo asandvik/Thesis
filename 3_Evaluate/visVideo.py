@@ -14,6 +14,22 @@ import matplotlib.gridspec as gridspec
 import cv2
 import time
 
+def IOminarea(boxA, boxB):
+    areaA = float((boxA[2] - boxA[0]) * (boxA[3] - boxA[1]))
+    areaB = float((boxB[2] - boxB[0]) * (boxB[3] - boxB[1]))
+
+    intAB = [max(boxA[0], boxB[0]), # xtl
+                max(boxA[1], boxB[1]), # ytl
+                min(boxA[2], boxB[2]), # xbr
+                min(boxA[3], boxB[3])] # ybr
+
+    if intAB[0] > intAB[2] or intAB[1] > intAB[3]:
+        return 0
+
+    areaAB = float((intAB[2] - intAB[0]) * (intAB[3] - intAB[1]))
+
+    return areaAB / min(areaA, areaB)
+
 def overlap(boxA, boxB):
     areaA = float((boxA[2] - boxA[0]) * (boxA[3] - boxA[1]))
     areaB = float((boxB[2] - boxB[0]) * (boxB[3] - boxB[1]))
@@ -30,7 +46,7 @@ def overlap(boxA, boxB):
 
     return areaAB
 
-def iou(boxA, boxB):
+def IOU(boxA, boxB):
     intersection = overlap(boxA, boxB)
 
     if intersection == 0:
@@ -80,7 +96,9 @@ def calcPreCrash(track):
     xbr = xbr0
     ybr = ybr0
     data = []
+
     for i in range(1,30):
+
         xtl -= dxtl
         ytl -= dytl
         xbr -= dxbr
@@ -221,10 +239,10 @@ def plotCrashVolumes():
 
             box_iou = 0
             if pxtl is not None:
-                box_iou = max(iou(getResBox(row), [pxtl, pytl, pxbr, pybr]), box_iou)
+                box_iou = max(IOU(getResBox(row), [pxtl, pytl, pxbr, pybr]), box_iou)
 
             for crash_frame in crash_frames:
-                box_iou = max(iou(getResBox(row), getAnnoBox(crash_frame)), box_iou)
+                box_iou = max(IOU(getResBox(row), getAnnoBox(crash_frame)), box_iou)
 
             color = yolo_colors[color_idx][0]
             color_idx += 1
@@ -266,7 +284,7 @@ def filterYolo(length, preCrashBoxes, yolo_boxes4, tracks):
         impact_frame = int(tracks[0].attrib.get('start'))
     
     yolo_colors = []
-    color_idx = 0
+    yolo_alarm_scores = []
     for framenum in range(length):
 
         # PreCrash Slack
@@ -284,15 +302,16 @@ def filterYolo(length, preCrashBoxes, yolo_boxes4, tracks):
         # Model Predictions
         yolo_filtered = yolo_boxes4.loc[(yolo_boxes4['frame'] == framenum) & (yolo_boxes4['conf'] > confSlider3.val)]
         prev_yolo_filtered = yolo_boxes4.loc[(yolo_boxes4['frame'] == framenum-1) & (yolo_boxes4['conf'] > confSlider3.val)]
+        prev_yolo_alarm_scores = yolo_alarm_scores
+        yolo_alarm_scores = []
 
         naive_sig = 1 if len(yolo_filtered) > 0 else 0
         ideal_sig = 0
 
-        # expected = 1 if len(crash_frames) > 0 else 0
-        expected = 0
+        expected = 1 if len(crash_frames) > 0 and len(yolo_filtered) == 0 else 0
 
-        if len(prev_yolo_filtered) == 0:
-            alarm_sig = 0 # enforce consecutive
+        # if len(prev_yolo_filtered) == 0:
+        #     alarm_sig = 0 # enforce consecutive
 
         predicted = 0
         fpredicted = 0
@@ -300,46 +319,63 @@ def filterYolo(length, preCrashBoxes, yolo_boxes4, tracks):
             predicted = 1
             row = yolo_filtered.iloc[j]
 
-            consecutive_iou = 0
-            for k in range(len(prev_yolo_filtered)):
-                prev_row = prev_yolo_filtered.iloc[k]
-                consecutive_iou = max(iou(getResBox(row), getResBox(prev_row)), consecutive_iou)
-
-            if consIOUMinslider.val < consecutive_iou < consIOUMaxslider.val:
-                alarm_sig += 1 # consecutive_iou
-
-            # compare Preprocessed with annotations
+            # get overlap with with annotations
             ideal_sig = 0
             box_iou = 0
             if pxtl is not None:
-                box_iou = max(iou(getResBox(row), [pxtl, pytl, pxbr, pybr]), box_iou)
+                box_iou = max(IOU(getResBox(row), [pxtl, pytl, pxbr, pybr]), box_iou)
 
             for crash_frame in crash_frames:
-                box_iou = max(iou(getResBox(row), getAnnoBox(crash_frame)), box_iou)
+                box_iou = max(IOU(getResBox(row), getAnnoBox(crash_frame)), box_iou)
 
+            # preprocessed assessment -> just minConf
             if box_iou >= annoIOUslider.val:
-                expected = 1
+                expected = 1 # set to 1 if the overlap between detection and annotation is high enough
                 ideal_sig = 1
                 if detect_delay is None:
                     detect_delay = framenum - impact_frame
 
-                if alarm_sig >= alarmThreshSlider.val: # raised filtered true positive
-                    fpredicted = 1
+            # postprocessed -> consecutive enforcement
+            consecutive_iou = 0
+            idx_prev_detection = None
+            for k in range(len(prev_yolo_filtered)):
+                prev_row = prev_yolo_filtered.iloc[k]
+                curr_iou = IOU(getResBox(row), getResBox(prev_row))
+                if curr_iou > consecutive_iou:
+                    consecutive_iou = curr_iou
+                    idx_prev_detection = k
+
+            if idx_prev_detection is None:
+                box_alarm_score = 0
+            elif consIOUMinslider.val <= consecutive_iou and consecutive_iou <= consIOUMaxslider.val:
+                box_alarm_score = 1 + prev_yolo_alarm_scores[idx_prev_detection]
+            else:        
+                box_alarm_score = 0    
+            yolo_alarm_scores.append(box_alarm_score)
+
+            # postproccessed assessment -> include consecutive enforcement
+            if box_iou >= annoIOUslider.val:
+                if box_alarm_score >= alarmThreshSlider.val: # raised filtered true positive
                     yolo_colors.append(['y', (255, 255, 0)])
                     if fdetect_delay is None:
                         fdetect_delay = framenum - impact_frame
                 else: # ignored filtered true positive
                     yolo_colors.append(['gray', (0, 0, 0)])
             else: 
-                if alarm_sig >= alarmThreshSlider.val: # raised filtered false positive
-                    fpredicted = 1
+                if box_alarm_score >= alarmThreshSlider.val: # raised filtered false positive
                     yolo_colors.append(['b', (0, 0, 255)])
                 else: # ignored filtered false positive
                     yolo_colors.append(['gray', (0, 0, 0)])
 
-            # determine if getResBox(row) should be a detection or suppressed
-
-            #iou_list_post.append(box_iou)
+        if len(yolo_alarm_scores) > 0:
+            alarm_sig = max(yolo_alarm_scores)
+        else:
+            alarm_sig = 0
+        
+        if len(yolo_filtered) > 0 and alarm_sig >= alarmThreshSlider.val:
+            fpredicted = 1
+        
+        # print("new scores", yolo_alarm_scores)
 
         if expected == 0 and predicted == 0:
             tn += 1
@@ -374,7 +410,7 @@ def filterYolo(length, preCrashBoxes, yolo_boxes4, tracks):
 # Widget Callbacks
 
 def cbPlotVideoFrame(val):
-    global axRight, cap, currFrame, height
+    global axRight, cap, currFrame, height, yolo_colors
 
     axRight.cla()
 
@@ -408,6 +444,7 @@ def cbPlotVideoFrame(val):
     #     cv2.rectangle(frame, (xtl, ytl), (xbr, ybr), (0,255,255), 2)
     #     cv2.putText(frame, f"{row['conf']:.2f}", (xtl, ybr), cv2.FONT_HERSHEY_SIMPLEX, 0.8, (0,255,255), 2)
     
+    #color_idx = 0
     yolo_filtered = yolo_boxes4.loc[(yolo_boxes4['frame'] == currFrame) & (yolo_boxes4['conf'] > confSlider3.val)]
     for j in range(len(yolo_filtered)):
         row = yolo_filtered.iloc[j]
@@ -415,10 +452,14 @@ def cbPlotVideoFrame(val):
 
         box_iou = 0
         if pxtl is not None:
-            box_iou = max(iou(getResBox(row), [pxtl, pytl, pxbr, pybr]), box_iou)
+            box_iou = max(IOU(getResBox(row), [pxtl, pytl, pxbr, pybr]), box_iou)
 
         for crash_frame in crash_frames:
-            box_iou = max(iou(getResBox(row), getAnnoBox(crash_frame)), box_iou)
+            box_iou = max(IOU(getResBox(row), getAnnoBox(crash_frame)), box_iou)
+
+        # doesn't work because not guaranteed to access sequentially. Would need an id for each detection
+        # color = yolo_colors[color_idx][1]
+        # color_idx += 1
 
         if box_iou >= annoIOUslider.val:
             color = (255, 255, 0)
@@ -523,31 +564,31 @@ def submitNorm(text):
     plotCrashVolumes()
     cbPrevFrame(None)
 
-def plotAlarm(signal1, signal2, signal3):
-    global axMiddleTop, axMiddleMid, axMiddleBot, axMiddleBot2
-    axMiddleTop.cla()
-    axMiddleMid.cla()
-    axMiddleBot.cla()
-    axMiddleBot2.cla()
-    axMiddleTop.set_ylabel("Naive")
-    axMiddleMid.set_ylabel("Ideal")
-    axMiddleBot.set_ylabel("Filtered")
-    axMiddleTop.plot(signal2)
-    axMiddleMid.plot(signal1)
+# def plotAlarm(signal1, signal2, signal3):
+#     global axMiddleTop, axMiddleMid, axMiddleBot, axMiddleBot2
+#     axMiddleTop.cla()
+#     axMiddleMid.cla()
+#     axMiddleBot.cla()
+#     axMiddleBot2.cla()
+#     axMiddleTop.set_ylabel("Naive")
+#     axMiddleMid.set_ylabel("Ideal")
+#     axMiddleBot.set_ylabel("Filtered")
+#     axMiddleTop.plot(signal2)
+#     axMiddleMid.plot(signal1)
 
-    binary_signal = []
-    for sample in signal3:
-        sample = 1 if sample > alarmThreshSlider.val else 0
-        binary_signal.append(sample)
-    axMiddleBot2.plot(binary_signal, color='r')
-    axMiddleBot.plot(signal3)
+#     binary_signal = []
+#     for sample in signal3:
+#         sample = 1 if sample > alarmThreshSlider.val else 0
+#         binary_signal.append(sample)
+#     axMiddleBot2.plot(binary_signal, color='r')
+#     axMiddleBot.plot(signal3)
 
-    axMiddleTop.set_ylim(bottom=0)
-    axMiddleMid.set_ylim(bottom=0)
-    axMiddleBot.set_ylim(bottom=0)
-    axMiddleBot2.set_ylim(bottom=0)
+#     axMiddleTop.set_ylim(bottom=0)
+#     axMiddleMid.set_ylim(bottom=0)
+#     axMiddleBot.set_ylim(bottom=0)
+#     axMiddleBot2.set_ylim(bottom=0)
 
-    fig.canvas.draw()
+#     fig.canvas.draw()
 
 def printMetrics(res):
     tp, fp, tn, fn, dd = res
@@ -586,7 +627,7 @@ def cbFilterCurrResult(event):
     global video_name, length, preCrashBoxes, yolo_boxes4, tracks
     result = filterYolo(length, preCrashBoxes, yolo_boxes4, tracks)
     printRes(99, video_name, result)
-    plotAlarm(result[2], result[3], result[4])
+    # plotAlarm(result[2], result[3], result[4])
 
 def cbFilterAllResults(event):
     global video_list, norm_video_list
@@ -694,6 +735,98 @@ def cbFilterAllResults(event):
 
     fig2.canvas.draw()
 
+
+def cbFilterAllResults2(event):
+    global video_list, norm_video_list
+
+    threshlist = [x / 100 for x in range(0, 101, 1)]
+
+    print("Crashes:")
+
+    for thresh in threshlist:
+        
+        consIOUMinslider.set_val(thresh)
+
+        pre_scores = []
+        post_scores = []
+        pre_dds = [] # detection delay
+        post_dds = []
+        pre_results = []
+        post_results = []
+        for i in range(len(video_list)):
+            video_id = video_list.iloc[i, 0]
+            video_name = video_list.iloc[i, 1]
+            video = videos.find(f".//video[@taskid='{video_id}']")
+            length = int(video.find('length').text)
+            tracks = video.find('tracks')
+            preCrashBoxes = calcPreCrash(tracks[0])
+            yolo_boxes4 = pd.read_csv(f"/notebooks/Thesis/results/yolo_train4/{video_name[:-4]}_{video_id}.csv")
+            result = filterYolo(length, preCrashBoxes, yolo_boxes4, tracks)
+            aprs = printRes(i, video_name, result)
+            pre_score = aprs[0][1] # use precision
+            post_score = aprs[1][1] # use precision
+            pre_scores.append(pre_score)
+            post_scores.append(post_score)
+            pre_results.append(aprs[0])
+            post_results.append(aprs[1])
+            pre_dd = result[0][4]
+            post_dd = result[1][4]
+            pre_dds.append(pre_dd) if pre_dd is not None else None
+            post_dds.append(post_dd) if post_dd is not None else None
+
+        npResults = np.array(post_results)
+        a_avg = np.average(npResults[:, 0])
+        p_avg = np.average(npResults[:, 1])
+        r_avg = np.average(npResults[:, 2])
+        s_avg = np.average(npResults[:, 3])
+        print(f"{thresh},{a_avg:.4f},{p_avg:.4f},{r_avg:.4f},{s_avg:.4f}")
+
+    print("Normal")
+
+    for thresh in threshlist:
+
+        consIOUMinslider.set_val(thresh)
+
+        pre_norm_scores = []
+        post_norm_scores = []
+        pre_norm_results = []
+        post_norm_results = []
+        for i in range(len(norm_video_list)):
+            video_name = norm_video_list[i]
+            video_path = f"/notebooks/data/Datasets/CPTAD/Videos_Normal/Test/{video_name}"
+            cap = cv2.VideoCapture(video_path)
+            length = int(cap.get(cv2.CAP_PROP_FRAME_COUNT))
+            yolo_boxes4 = pd.read_csv(f"/notebooks/Thesis/results/yolo_train4_norm/{video_name[:-4]}_{i}.csv")
+            preCrashBoxes = []
+            tracks = ET.Element("Empty")
+            result = filterYolo(length, preCrashBoxes, yolo_boxes4, tracks)
+            aprs = printRes(i, video_name, result)
+            pre_score = aprs[0][3] # use specificity
+            post_score = aprs[1][3] # use specificity
+            pre_norm_scores.append(pre_score)
+            post_norm_scores.append(post_score)
+            pre_norm_results.append(aprs[0])
+            post_norm_results.append(aprs[1])
+
+        npResults = np.array(post_norm_results)
+        a_avg = np.average(npResults[:, 0])
+        p_avg = np.average(npResults[:, 1])
+        r_avg = np.average(npResults[:, 2])
+        s_avg = np.average(npResults[:, 3])
+        print(f"{thresh},{a_avg:.4f},{p_avg:.4f},{r_avg:.4f},{s_avg:.4f}")
+
+def cbSavePlots(event):
+    global fig, axLeft, axRight, video_name
+
+    prefix = video_name[:-4]
+
+    extent = axLeft.get_window_extent().transformed(fig.dpi_scale_trans.inverted())
+    fig.savefig(f"/notebooks/Thesis/3_Evaluate/figures/{prefix}_3dplot.png", bbox_inches=extent.expanded(1.2, 1.1))
+
+    extent = axRight.get_window_extent().transformed(fig.dpi_scale_trans.inverted())
+    fig.savefig(f"/notebooks/Thesis/3_Evaluate/figures/{prefix}_frame.png", bbox_inches=extent)
+
+    print(f"Saved {prefix}")
     
 
 # Annotations
@@ -727,19 +860,22 @@ ax2Bot = fig2.add_subplot(2,2,3)
 
 # GUI Skeleton
 fig = plt.figure("GUI", figsize=(16, 6))
-axLeft = fig.add_subplot([0, 0.3, 0.3, 0.7], projection='3d')
-axMiddleTop = fig.add_subplot([0.33, 0.7, 0.3, 0.2])
-axMiddleMid = fig.add_subplot([0.33, 0.5, 0.3, 0.2])
-axMiddleBot = fig.add_subplot([0.33, 0.3, 0.3, 0.2])
-axMiddleBot2 = axMiddleBot.twinx()
-axRight = fig.add_subplot([0.67, 0.3, 0.33, 0.65])
+# axLeft = fig.add_subplot([0, 0.3, 0.3, 0.7], projection='3d')
+# axMiddleTop = fig.add_subplot([0.33, 0.7, 0.3, 0.2])
+# axMiddleMid = fig.add_subplot([0.33, 0.5, 0.3, 0.2])
+# axMiddleBot = fig.add_subplot([0.33, 0.3, 0.3, 0.2])
+# axMiddleBot2 = axMiddleBot.twinx()
+# axRight = fig.add_subplot([0.67, 0.3, 0.33, 0.65])
+
+axLeft = fig.add_subplot([0, 0.3, 0.45, 0.7], projection='3d')
+axRight = fig.add_subplot([0.55, 0.3, 0.45, 0.65])
 
 # Widget Axes
 axSlider1 = plt.axes([0.04, 0.20, 0.17, 0.03])
 axSlider2 = plt.axes([0.04, 0.17, 0.17, 0.03])
 axSlider3 = plt.axes([0.04, 0.14, 0.17, 0.03])
-axConfSlider2 = plt.axes([0.25, 0.17, 0.17, 0.03])
-axConfSlider3 = plt.axes([0.25, 0.14, 0.17, 0.03])
+# axConfSlider2 = plt.axes([0.25, 0.17, 0.17, 0.03])
+axConfSlider3 = plt.axes([0.3, 0.20, 0.17, 0.03])
 axNextVideoButton = plt.axes([0.84, 0.07, 0.1, 0.04])
 axPrevVideoButton = plt.axes([0.54, 0.07, 0.1, 0.04])
 axNextNormVideoButton = plt.axes([0.84, 0.025, 0.1, 0.04])
@@ -757,11 +893,11 @@ axConsIOUMaxSlider = plt.axes([0.04, 0.02, 0.12, 0.03])
 axAlarmThreshSlider = plt.axes([0.25, 0.08, 0.12, 0.03])
 
 # Widgets
-slider1 = Slider(axSlider1, 'Anno', 0.0, 0.3, valinit=0.15)
-slider2 = Slider(axSlider2, 'Yolo2', 0.0, 1.0, valinit=0.0)
-slider3 = Slider(axSlider3, 'Yolo4', 0.0, 1.0, valinit=0.5)
-confSlider2 = Slider(axConfSlider2, '', 0, 1.0, valinit=0.8)
-confSlider3 = Slider(axConfSlider3, '', 0, 1.0, valinit=0.8)
+slider1 = Slider(axSlider1, 'Anno', 0.0, 0.04, valinit=0.15)
+# slider2 = Slider(axSlider2, 'Yolo2', 0.0, 1.0, valinit=0.0)
+slider3 = Slider(axSlider2, 'Yolo4', 0.0, 1.0, valinit=0.5)
+# confSlider2 = Slider(axConfSlider2, '', 0, 1.0, valinit=0.8, valstep=0.01)
+confSlider3 = Slider(axSlider3, 'MinConf', 0, 1.0, valinit=0.53, valstep=0.01)
 nextVideoButton = Button(axNextVideoButton, 'Next Crash Video', color='gold', hovercolor='skyblue')
 prevVideoButton = Button(axPrevVideoButton, 'Prev Crash Video', color='gold', hovercolor='skyblue')
 nextNormVideoButton = Button(axNextNormVideoButton, 'Next Norm Video', color='gold', hovercolor='skyblue')
@@ -773,16 +909,17 @@ filterButton = Button(axFilterButton, 'Filter Single', color='gold', hovercolor=
 filterAllButton = Button(axFilterAllButton, 'Filter All', color='gold', hovercolor='skyblue')
 textbox = TextBox(axTextBox, 'Index', initial='0')
 textboxNorm = TextBox(axTextBoxNorm, 'Index', initial='0')
-annoIOUslider = Slider(axAnnoIOUSlider, 'AnnoIOU', 0.5, 1.0, valinit=0.6) # using 0.6 bc of crash vid #8
-consIOUMinslider = Slider(axConsIOUMinSlider, 'ConsIOUMin', 0.5, 1.0, valinit=0.77)
-consIOUMaxslider = Slider(axConsIOUMaxSlider, 'ConsIOUMax', 0.5, 1.0, valinit=1.0)
-alarmThreshSlider = Slider(axAlarmThreshSlider, 'MinConsec', 0.0, 10.0, valinit=0.0)
+annoIOUslider = Slider(axConfSlider3, 'AnnoIOU', 0.5, 1.0, valinit=0.56) # using 0.56 bc of crash vid #8 and #10
+consIOUMinslider = Slider(axConsIOUMinSlider, 'ConsIOUMin', 0.0, 1.0, valinit=0.86)
+consIOUMaxslider = Slider(axConsIOUMaxSlider, 'ConsIOUMax', 0.0, 1.0, valinit=1.0)
+alarmThreshSlider = Slider(axAnnoIOUSlider, 'MinConsec', 0.0, 10.0, valinit=1.0, valstep=1)
+savePlotsButton = Button(axAlarmThreshSlider, 'Save Figs', color='gold', hovercolor='skyblue')
 
 # Attach Callbacks
 slider1.on_changed(cbUpdate)
-slider2.on_changed(cbUpdate)
+# slider2.on_changed(cbUpdate)
 slider3.on_changed(cbUpdate)
-confSlider2.on_changed(cbUpdate)
+# confSlider2.on_changed(cbUpdate)
 confSlider3.on_changed(cbUpdate)
 nextVideoButton.on_clicked(cbNextVideo)
 prevVideoButton.on_clicked(cbPrevVideo)
@@ -799,6 +936,7 @@ annoIOUslider.on_changed(cbUpdate)
 consIOUMinslider.on_changed(cbUpdate)
 consIOUMaxslider.on_changed(cbUpdate)
 alarmThreshSlider.on_changed(cbUpdate)
+savePlotsButton.on_clicked(cbSavePlots)
 
 
 loadVideoResults()
