@@ -7,7 +7,7 @@ exp6: train whole network, learning rate 0.0002, 100 epochs
 exp7: train whole network, learning rate 0.0002, 100 epochs, len16strd8lim600, window
 exp8: same as exp6 but with BCELoss()
 > added accuracy measurement
-exp9: same as exp7 but with BCELoss(), 70 epochs
+exp9: same as exp7 but with BCELoss(), 70 epochsThe
     validation accuracy stays around 50%. Not good. Not learning what a car crash looks like. Too low resolution (128x171->crop112x112)? Try object detector model?
 > added TFPN measurements
 exp10: same as exp8 (for accuracy)

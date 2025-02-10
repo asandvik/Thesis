@@ -95,9 +95,9 @@ for j in range(len(vidlist) + len(normvidlist)):
         cap = cv2.VideoCapture(NORM_VIDEO_DIR + video_name)
         
     resultFile = f"/notebooks/Thesis/results/{MODEL}/{video_name[:-4]}_{video_id}.csv"
-    if os.path.isfile(resultFile):
-        print(f"{resultFile} exists. skipping")
-        continue
+    # if os.path.isfile(resultFile):
+    #     print(f"{resultFile} exists. skipping")
+    #     continue
 
     print(video_name)
     
@@ -148,14 +148,14 @@ for j in range(len(vidlist) + len(normvidlist)):
 
         # if buffer is not full
         if len(frames_01) is not NFRAMES_01:
-            cv2.imshow('raw', frame)
+            # cv2.imshow('gray', frame)
             framenum += 1
             continue
 
         # movement binary image    
         delta = cv2.absdiff(frames_md[0], frames_md[-1])
-        thresh = cv2.threshold(delta, BIN_THRESH, 255, cv2.THRESH_BINARY)[1]
-        thresh = cv2.dilate(thresh, None, iterations=1)
+        thresh1 = cv2.threshold(delta, BIN_THRESH, 255, cv2.THRESH_BINARY)[1]
+        thresh = cv2.dilate(thresh1, None, iterations=1)
 
         # list of patches w/ movement top left corner 
         patchesTL = []
@@ -234,19 +234,25 @@ for j in range(len(vidlist) + len(normvidlist)):
             patch_idx_offset += MAX_BATCH
 
         cv2.imshow('raw', frame)
-        vidwriter.write(frame)
-        # cv2.imshow('delta', delta)
-        # cv2.imshow('thresh', thresh)
+        # vidwriter.write(frame)
+        cv2.imshow('thresh', thresh1)
+        cv2.imshow('delta', delta)
+        cv2.imshow('dilate', thresh)
 
         framenum += 1
 
         if (cv2.waitKey(1) & 0xFF == ord('q')):
             break
 
+        if framenum % 30 == 0:
+            input("Press Enter to Continue..")
+        else:
+            print("Frame ", framenum)
+
     if len(results) > 0:
         results = np.array(results).reshape(-1, len(results[0]))
     results = pd.DataFrame(results, columns=['frame', 'xtl', 'ytl', 'target', 'prediction'])
-    results.to_csv(resultFile, index=False)
+    # results.to_csv(resultFile, index=False)
 
     cap.release()
     vidwriter.release()

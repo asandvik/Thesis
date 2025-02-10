@@ -2,6 +2,7 @@
 This script 
 """
 import os
+import csv
 import numpy as np
 import pandas as pd
 import matplotlib.pyplot as plt
@@ -610,34 +611,39 @@ def printMetrics(res):
 
     s = tn / (tn + fp) # specificity
 
-    print(f"  A={a:.4f} P={p:0.4f} R={r:0.4f} S={s:0.4f} TP={tp:>3} FP={fp:>3} TN={tn:>3} FN={fn:>3} DD={str(dd):>4}")
+    if not stopPrint:
+        print(f"  A={a:.4f} P={p:0.4f} R={r:0.4f} S={s:0.4f} TP={tp:>3} FP={fp:>3} TN={tn:>3} FN={fn:>3} DD={str(dd):>4}")
 
     return [a, p, r, s] 
     
 def printRes(idx, name, result):
     pre = result[0]
     post = result[1]
-    print(f"{idx:2} {name}")
+    if not stopPrint:
+        print(f"{idx:2} {name}")
     preAPRS = printMetrics(pre)
     postAPRS = printMetrics(post)
     return [preAPRS, postAPRS]
     
 
 def cbFilterCurrResult(event):
-    global video_name, length, preCrashBoxes, yolo_boxes4, tracks
+    global video_name, length, preCrashBoxes, yolo_boxes4, tracks, stopPrint
     result = filterYolo(length, preCrashBoxes, yolo_boxes4, tracks)
+    stopPrint = False
     printRes(99, video_name, result)
     # plotAlarm(result[2], result[3], result[4])
 
 def cbFilterAllResults(event):
-    global video_list, norm_video_list
+    global video_list, norm_video_list, stopPrint
 
+    stopPrint = False
     pre_scores = []
     post_scores = []
     pre_dds = [] # detection delay
     post_dds = []
     pre_results = []
     post_results = []
+    all_aprs = []
     for i in range(len(video_list)):
         video_id = video_list.iloc[i, 0]
         video_name = video_list.iloc[i, 1]
@@ -648,6 +654,7 @@ def cbFilterAllResults(event):
         yolo_boxes4 = pd.read_csv(f"/notebooks/Thesis/results/yolo_train4/{video_name[:-4]}_{video_id}.csv")
         result = filterYolo(length, preCrashBoxes, yolo_boxes4, tracks)
         aprs = printRes(i, video_name, result)
+        all_aprs.append([video_name] + aprs[0])
         pre_score = aprs[0][1] # use precision
         post_score = aprs[1][1] # use precision
         pre_scores.append(pre_score)
@@ -673,6 +680,7 @@ def cbFilterAllResults(event):
         tracks = ET.Element("Empty")
         result = filterYolo(length, preCrashBoxes, yolo_boxes4, tracks)
         aprs = printRes(i, video_name, result)
+        all_aprs.append([video_name] + aprs[0])
         pre_score = aprs[0][3] # use specificity
         post_score = aprs[1][3] # use specificity
         pre_norm_scores.append(pre_score)
@@ -681,6 +689,11 @@ def cbFilterAllResults(event):
         post_norm_results.append(aprs[1])
 
     print("All")
+    print(all_aprs)
+    with open("YoloScores.csv", 'w', newline='') as csvfile:
+        csvwriter = csv.writer(csvfile)
+        csvwriter.writerows(all_aprs)
+    # np.savetxt("YoloScores.csv", all_aprs, delimiter=',')
 
     print("Crashes:")
     npResults = np.array(pre_results)
@@ -720,6 +733,7 @@ def cbFilterAllResults(event):
     ax2Top.hist(post_scores, bins=bins, alpha=0.5, label=f"Post ({len(post_scores)})", color='orange')
     ax2Top.legend()
     ax2Top.set_title('Crash Video Scores (Precision)')
+    ax2Top.set_xlim(0, 1)
 
     bins = np.histogram(np.hstack((pre_dds, post_dds)), bins=nbins)[1]
     ax2Mid.hist(pre_dds, bins=bins, alpha=0.5, label=f"Pre  ({len(pre_dds)})", color='blue')
@@ -732,88 +746,143 @@ def cbFilterAllResults(event):
     ax2Bot.hist(post_norm_scores, bins=bins, alpha=0.5, label=f"Post ({len(post_norm_scores)})", color='orange')
     ax2Bot.legend()
     ax2Bot.set_title('Normal Video Scores (Specificity)')
+    ax2Bot.set_xlim(0, 1)
+
+    
 
     fig2.canvas.draw()
 
 
 def cbFilterAllResults2(event):
-    global video_list, norm_video_list
+    global video_list, norm_video_list, stopPrint
 
-    threshlist = [x / 100 for x in range(0, 101, 1)]
+    stopPrint = True
+
+    # threshlist1 = [x / 100 for x in range(0, 101)] # 1, 2, 3
+    threshlist1 = [x / 100 for x in range(0, 101)]
+    threshlist2 = range(0, 10) # 4
+
+    # threshlist = [0.53]
 
     print("Crashes:")
 
-    for thresh in threshlist:
+    allAs = []
+    allPs = []
+    allRs = []
+    allSs = []
+
+    for thresh1 in threshlist1:
+        consIOUMinslider.set_val(thresh1) # 2
+
+        As = [thresh1]
+        Ps = [thresh1]
+        Rs = [thresh1]
+        Ss = [thresh1]
+
+        for thresh2 in threshlist2:
+            # confSlider3.set_val(thresh) # 1
+            # consIOUMinslider.set_val(thresh) # 2
+            # consIOUMaxslider.set_val(thresh) # 3
+            alarmThreshSlider.set_val(thresh2) # 4
+            
+            pre_scores = []
+            post_scores = []
+            pre_dds = [] # detection delay
+            post_dds = []
+            pre_results = []
+            post_results = []
+            for i in range(len(video_list)):
+                video_id = video_list.iloc[i, 0]
+                video_name = video_list.iloc[i, 1]
+                video = videos.find(f".//video[@taskid='{video_id}']")
+                length = int(video.find('length').text)
+                tracks = video.find('tracks')
+                preCrashBoxes = calcPreCrash(tracks[0])
+                yolo_boxes4 = pd.read_csv(f"/notebooks/Thesis/results/yolo_train4/{video_name[:-4]}_{video_id}.csv")
+                result = filterYolo(length, preCrashBoxes, yolo_boxes4, tracks)
+                aprs = printRes(i, video_name, result)
+                pre_score = aprs[0][1] # use precision
+                post_score = aprs[1][1] # use precision
+                pre_scores.append(pre_score)
+                post_scores.append(post_score)
+                pre_results.append(aprs[0])
+                post_results.append(aprs[1])
+                pre_dd = result[0][4]
+                post_dd = result[1][4]
+                pre_dds.append(pre_dd) if pre_dd is not None else None
+                post_dds.append(post_dd) if post_dd is not None else None
+
+            npResults = np.array(post_results)
+            a_avg = np.average(npResults[:, 0])
+            p_avg = np.average(npResults[:, 1])
+            r_avg = np.average(npResults[:, 2])
+            s_avg = np.average(npResults[:, 3])
+            As.append(a_avg)
+            Ps.append(p_avg)
+            Rs.append(r_avg)
+            Ss.append(s_avg)
+            print(f"{thresh1},{thresh2},{a_avg:.4f},{p_avg:.4f},{r_avg:.4f},{s_avg:.4f}")
         
-        consIOUMinslider.set_val(thresh)
+        allAs.append(As)
+        allPs.append(Ps)
+        allRs.append(Rs)
+        allSs.append(Ss)
 
-        pre_scores = []
-        post_scores = []
-        pre_dds = [] # detection delay
-        post_dds = []
-        pre_results = []
-        post_results = []
-        for i in range(len(video_list)):
-            video_id = video_list.iloc[i, 0]
-            video_name = video_list.iloc[i, 1]
-            video = videos.find(f".//video[@taskid='{video_id}']")
-            length = int(video.find('length').text)
-            tracks = video.find('tracks')
-            preCrashBoxes = calcPreCrash(tracks[0])
-            yolo_boxes4 = pd.read_csv(f"/notebooks/Thesis/results/yolo_train4/{video_name[:-4]}_{video_id}.csv")
-            result = filterYolo(length, preCrashBoxes, yolo_boxes4, tracks)
-            aprs = printRes(i, video_name, result)
-            pre_score = aprs[0][1] # use precision
-            post_score = aprs[1][1] # use precision
-            pre_scores.append(pre_score)
-            post_scores.append(post_score)
-            pre_results.append(aprs[0])
-            post_results.append(aprs[1])
-            pre_dd = result[0][4]
-            post_dd = result[1][4]
-            pre_dds.append(pre_dd) if pre_dd is not None else None
-            post_dds.append(post_dd) if post_dd is not None else None
+    header = ["ConsIOUMin", 0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10]
 
-        npResults = np.array(post_results)
-        a_avg = np.average(npResults[:, 0])
-        p_avg = np.average(npResults[:, 1])
-        r_avg = np.average(npResults[:, 2])
-        s_avg = np.average(npResults[:, 3])
-        print(f"{thresh},{a_avg:.4f},{p_avg:.4f},{r_avg:.4f},{s_avg:.4f}")
+    with open("sweep_A.csv",'w',newline='') as file:
+        writer = csv.writer(file)
+        writer.writerow(header)
+        writer.writerows(allAs)
 
-    print("Normal")
+    with open("sweep_P.csv",'w',newline='') as file:
+        writer = csv.writer(file)
+        writer.writerow(header)
+        writer.writerows(allPs)
 
-    for thresh in threshlist:
+    with open("sweep_R.csv",'w',newline='') as file:
+        writer = csv.writer(file)
+        writer.writerow(header)
+        writer.writerows(allRs)
 
-        consIOUMinslider.set_val(thresh)
+    with open("sweep_S.csv",'w',newline='') as file:
+        writer = csv.writer(file)
+        writer.writerow(header)
+        writer.writerows(allSs)
 
-        pre_norm_scores = []
-        post_norm_scores = []
-        pre_norm_results = []
-        post_norm_results = []
-        for i in range(len(norm_video_list)):
-            video_name = norm_video_list[i]
-            video_path = f"/notebooks/data/Datasets/CPTAD/Videos_Normal/Test/{video_name}"
-            cap = cv2.VideoCapture(video_path)
-            length = int(cap.get(cv2.CAP_PROP_FRAME_COUNT))
-            yolo_boxes4 = pd.read_csv(f"/notebooks/Thesis/results/yolo_train4_norm/{video_name[:-4]}_{i}.csv")
-            preCrashBoxes = []
-            tracks = ET.Element("Empty")
-            result = filterYolo(length, preCrashBoxes, yolo_boxes4, tracks)
-            aprs = printRes(i, video_name, result)
-            pre_score = aprs[0][3] # use specificity
-            post_score = aprs[1][3] # use specificity
-            pre_norm_scores.append(pre_score)
-            post_norm_scores.append(post_score)
-            pre_norm_results.append(aprs[0])
-            post_norm_results.append(aprs[1])
+    # print("Normal")
 
-        npResults = np.array(post_norm_results)
-        a_avg = np.average(npResults[:, 0])
-        p_avg = np.average(npResults[:, 1])
-        r_avg = np.average(npResults[:, 2])
-        s_avg = np.average(npResults[:, 3])
-        print(f"{thresh},{a_avg:.4f},{p_avg:.4f},{r_avg:.4f},{s_avg:.4f}")
+    # for thresh in threshlist:
+
+    #     consIOUMinslider.set_val(thresh)
+
+    #     pre_norm_scores = []
+    #     post_norm_scores = []
+    #     pre_norm_results = []
+    #     post_norm_results = []
+    #     for i in range(len(norm_video_list)):
+    #         video_name = norm_video_list[i]
+    #         video_path = f"/notebooks/data/Datasets/CPTAD/Videos_Normal/Test/{video_name}"
+    #         cap = cv2.VideoCapture(video_path)
+    #         length = int(cap.get(cv2.CAP_PROP_FRAME_COUNT))
+    #         yolo_boxes4 = pd.read_csv(f"/notebooks/Thesis/results/yolo_train4_norm/{video_name[:-4]}_{i}.csv")
+    #         preCrashBoxes = []
+    #         tracks = ET.Element("Empty")
+    #         result = filterYolo(length, preCrashBoxes, yolo_boxes4, tracks)
+    #         aprs = printRes(i, video_name, result)
+    #         pre_score = aprs[0][3] # use specificity
+    #         post_score = aprs[1][3] # use specificity
+    #         pre_norm_scores.append(pre_score)
+    #         post_norm_scores.append(post_score)
+    #         pre_norm_results.append(aprs[0])
+    #         post_norm_results.append(aprs[1])
+
+    #     npResults = np.array(post_norm_results)
+    #     a_avg = np.average(npResults[:, 0])
+    #     p_avg = np.average(npResults[:, 1])
+    #     r_avg = np.average(npResults[:, 2])
+    #     s_avg = np.average(npResults[:, 3])
+    #     print(f"{thresh},{a_avg:.4f},{p_avg:.4f},{r_avg:.4f},{s_avg:.4f}")
 
 def cbSavePlots(event):
     global fig, axLeft, axRight, video_name
@@ -821,7 +890,7 @@ def cbSavePlots(event):
     prefix = video_name[:-4]
 
     extent = axLeft.get_window_extent().transformed(fig.dpi_scale_trans.inverted())
-    fig.savefig(f"/notebooks/Thesis/3_Evaluate/figures/{prefix}_3dplot.png", bbox_inches=extent.expanded(1.2, 1.1))
+    fig.savefig(f"/notebooks/Thesis/3_Evaluate/figures/{prefix}_3dplot.png", bbox_inches=extent.expanded(1.2, 1))
 
     extent = axRight.get_window_extent().transformed(fig.dpi_scale_trans.inverted())
     fig.savefig(f"/notebooks/Thesis/3_Evaluate/figures/{prefix}_frame.png", bbox_inches=extent)
@@ -839,7 +908,7 @@ norm_video_list = os.listdir('/notebooks/data/Datasets/CPTAD/Videos_Normal/Test/
 
 # Global Variables
 preCrashBoxes = []
-idx = 0
+idx = 5 # gives inaccurate results at first if starts with idx = 0?
 norm_idx = -1 # -1 bc crash video is displayed first. Prevents skipping first normal video 
 video_id = video_list.iloc[idx, 0]
 video_name = video_list.iloc[idx, 1]
@@ -851,6 +920,7 @@ height = 10
 width = 10
 currFrame = 0
 yolo_colors = []
+stopPrint = False
 
 fig2 = plt.figure("Results", figsize=(12, 6))
 ax2Top = fig2.add_subplot(2,2,1)
@@ -891,9 +961,10 @@ axAnnoIOUSlider = plt.axes([0.04, 0.08, 0.12, 0.03])
 axConsIOUMinSlider = plt.axes([0.04, 0.05, 0.12, 0.03])
 axConsIOUMaxSlider = plt.axes([0.04, 0.02, 0.12, 0.03])
 axAlarmThreshSlider = plt.axes([0.25, 0.08, 0.12, 0.03])
+axSweep = plt.axes([0.25, 0.04, 0.12, 0.03])
 
 # Widgets
-slider1 = Slider(axSlider1, 'Anno', 0.0, 0.04, valinit=0.15)
+slider1 = Slider(axSlider1, 'Anno', 0.0, 0.1, valinit=0.05)
 # slider2 = Slider(axSlider2, 'Yolo2', 0.0, 1.0, valinit=0.0)
 slider3 = Slider(axSlider2, 'Yolo4', 0.0, 1.0, valinit=0.5)
 # confSlider2 = Slider(axConfSlider2, '', 0, 1.0, valinit=0.8, valstep=0.01)
@@ -907,10 +978,11 @@ nextFrameButton = Button(axNextFrameButton, 'Next Frame', color='gold', hovercol
 prevFrameButton = Button(axPrevFrameButton, 'Prev Frame', color='gold', hovercolor='skyblue')
 filterButton = Button(axFilterButton, 'Filter Single', color='gold', hovercolor='skyblue')
 filterAllButton = Button(axFilterAllButton, 'Filter All', color='gold', hovercolor='skyblue')
+sweepButton = Button(axSweep, 'Sweep', color='gold', hovercolor='skyblue')
 textbox = TextBox(axTextBox, 'Index', initial='0')
 textboxNorm = TextBox(axTextBoxNorm, 'Index', initial='0')
 annoIOUslider = Slider(axConfSlider3, 'AnnoIOU', 0.5, 1.0, valinit=0.56) # using 0.56 bc of crash vid #8 and #10
-consIOUMinslider = Slider(axConsIOUMinSlider, 'ConsIOUMin', 0.0, 1.0, valinit=0.86)
+consIOUMinslider = Slider(axConsIOUMinSlider, 'ConsIOUMin', 0.0, 1.0, valinit=0.9)
 consIOUMaxslider = Slider(axConsIOUMaxSlider, 'ConsIOUMax', 0.0, 1.0, valinit=1.0)
 alarmThreshSlider = Slider(axAnnoIOUSlider, 'MinConsec', 0.0, 10.0, valinit=1.0, valstep=1)
 savePlotsButton = Button(axAlarmThreshSlider, 'Save Figs', color='gold', hovercolor='skyblue')
@@ -930,6 +1002,7 @@ nextFrameButton.on_clicked(cbNextFrame)
 prevFrameButton.on_clicked(cbPrevFrame)
 filterButton.on_clicked(cbFilterCurrResult)
 filterAllButton.on_clicked(cbFilterAllResults)
+sweepButton.on_clicked(cbFilterAllResults2)
 textbox.on_submit(submit)
 textboxNorm.on_submit(submitNorm)
 annoIOUslider.on_changed(cbUpdate)
