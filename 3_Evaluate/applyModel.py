@@ -235,19 +235,19 @@ for j in range(len(vidlist) + len(normvidlist)):
 
         cv2.imshow('raw', frame)
         # vidwriter.write(frame)
-        cv2.imshow('thresh', thresh1)
-        cv2.imshow('delta', delta)
-        cv2.imshow('dilate', thresh)
+        # cv2.imshow('thresh', thresh1)
+        # cv2.imshow('delta', delta)
+        # cv2.imshow('dilate', thresh)
 
         framenum += 1
 
         if (cv2.waitKey(1) & 0xFF == ord('q')):
             break
 
-        if framenum % 30 == 0:
-            input("Press Enter to Continue..")
-        else:
-            print("Frame ", framenum)
+        # if framenum % 30 == 0:
+        #     input("Press Enter to Continue..")
+        # else:
+        print("Frame ", framenum)
 
     if len(results) > 0:
         results = np.array(results).reshape(-1, len(results[0]))
